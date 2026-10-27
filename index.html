@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Channel Upload Tracker</title>
+  <link rel="stylesheet" href="styles.css?v=12" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+<body>
+  <main class="wrap">
+    <header class="topbar">
+      <h1>Youtube Channel Traffic Tracker</h1>
+      <button type="button" id="settings-btn" class="settings-btn" aria-haspopup="dialog" aria-controls="settings">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>
+        </svg>
+        <span>Settings</span>
+        <span id="key-state" class="key-state" hidden>No API key</span>
+      </button>
+    </header>
+
+    <dialog id="settings" class="dialog" aria-labelledby="settings-title">
+      <form id="settings-form">
+        <div class="dlg-head">
+          <h2 id="settings-title">Settings</h2>
+          <button type="button" id="settings-close" class="icon-btn" aria-label="Close settings">×</button>
+        </div>
+        <label for="api-key" class="dlg-label">YouTube Data API key</label>
+        <div class="key-row">
+          <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="AIza..." />
+          <button type="button" id="key-toggle" class="secondary" aria-pressed="false">Show</button>
+        </div>
+        <p class="muted dlg-hint">
+          Used by both tabs and stored only in this browser.
+          <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Get a key</a>
+        </p>
+        <p id="settings-msg" class="status" role="status" aria-live="polite"></p>
+        <div class="dlg-actions">
+          <button type="button" id="key-clear" class="secondary">Clear key</button>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="tabs" role="tablist" aria-label="Views">
+      <button type="button" role="tab" id="tab-channel" data-tab="channel" aria-controls="panel-channel" aria-selected="true">Channel</button>
+      <button type="button" role="tab" id="tab-compare" data-tab="compare" aria-controls="panel-compare" aria-selected="false" tabindex="-1">Compare channels</button>
+    </div>
+
+    <div id="panel-channel" role="tabpanel" aria-labelledby="tab-channel">
+    <form id="search-form" class="card form">
+      <label class="grow">
+        <span>Channel (handle, URL or channel ID)</span>
+        <input id="channel" type="text" placeholder="@mkbhd, https://youtube.com/@mkbhd, or UC..." required />
+      </label>
+      <label class="small">
+        <span>Days</span>
+        <input id="days" type="number" min="1" max="365" value="30" />
+      </label>
+      <label class="small">
+        <span>Min length (min)</span>
+        <input id="min-length" type="number" min="0" step="any" value="1" />
+      </label>
+      <label class="small">
+        <span>Max length (min)</span>
+        <input id="max-length" type="number" min="0" step="any" placeholder="Any" />
+      </label>
+      <button id="submit" type="submit">Load videos</button>
+    </form>
+
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <section id="results" hidden>
+      <div class="card channel">
+        <img id="ch-thumb" alt="" />
+        <div>
+          <h2 id="ch-title"></h2>
+          <p id="ch-meta" class="muted"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="chart-head">
+          <div>
+            <h3>Views per video, by publish date</h3>
+            <p class="muted chart-sub">Each point is one video's total views, placed at its publish time.</p>
+          </div>
+          <ul class="legend" aria-label="Legend">
+            <li><span class="key key-dot"></span>Views per video</li>
+            <li id="legend-trend"><span class="key key-line"></span><span>Trend (<span id="legend-trend-days">2</span>-day average)</span></li>
+            <li><span class="key key-dash"></span>Average <strong id="legend-avg">–</strong></li>
+          </ul>
+        </div>
+        <div class="chart-box">
+          <canvas id="chart" role="img" aria-label="Views per video over time with trend and average lines"></canvas>
+          <div id="chart-tip" class="chart-tip" hidden></div>
+          <p id="chart-empty" class="chart-empty muted" hidden></p>
+        </div>
+        <p class="muted note">Hover a point for details, click to open the video. View counts are current totals as reported by YouTube.</p>
+      </div>
+
+      <div class="card">
+        <h3>Hashtags</h3>
+        <p class="muted chart-sub">Hashtags found in video titles and descriptions. Click one to open it on YouTube.</p>
+        <div class="ht-grid">
+          <section>
+            <h4>Used by the most-viewed video</h4>
+            <div id="ht-top"></div>
+          </section>
+          <section>
+            <h4>Top hashtags by total views</h4>
+            <ol id="ht-rank" class="ht-rank"></ol>
+            <p id="ht-rank-empty" class="muted" hidden>None of these videos use hashtags.</p>
+          </section>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Videos</h3>
+        <div class="table-wrap">
+          <table id="table">
+            <thead>
+              <tr>
+                <th data-sort="publishedAt">Published</th>
+                <th data-sort="title">Title</th>
+                <th data-sort="duration" class="num">Length</th>
+                <th data-sort="views" class="num">Views</th>
+                <th data-sort="likes" class="num">Likes</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    </div>
+
+    <div id="panel-compare" role="tabpanel" aria-labelledby="tab-compare" hidden>
+      <form id="cmp-form" class="card cmp-form">
+        <fieldset class="cmp-channels">
+          <legend>Channels <span class="muted">(up to 5)</span></legend>
+          <ol id="cmp-list"></ol>
+          <button type="button" id="cmp-add" class="ghost">+ Add channel</button>
+        </fieldset>
+        <div class="form cmp-filters">
+          <label class="small">
+            <span>Days</span>
+            <input id="cmp-days" type="number" min="1" max="365" value="30" />
+          </label>
+          <label class="small">
+            <span>Min length (min)</span>
+            <input id="cmp-min-length" type="number" min="0" step="any" value="1" />
+          </label>
+          <label class="small">
+            <span>Max length (min)</span>
+            <input id="cmp-max-length" type="number" min="0" step="any" placeholder="Any" />
+          </label>
+          <button id="cmp-submit" type="submit">Compare</button>
+        </div>
+      </form>
+
+      <p id="cmp-status" class="status" role="status" aria-live="polite"></p>
+
+      <section id="cmp-results" hidden>
+        <div class="card">
+          <div class="chart-head">
+            <div>
+              <h3>View trend by channel</h3>
+              <p class="muted chart-sub">Hover to compare channels on any day. Click a channel in the legend to hide or show it.</p>
+            </div>
+            <ul class="legend" aria-label="Line types">
+              <li><span class="key key-line neutral"></span><span>Trend (<span id="cmp-trend-days">2</span>-day average)</span></li>
+              <li><span class="key key-dash"></span>Channel average views</li>
+              <li><label class="check"><input id="cmp-log" type="checkbox" /> Log scale</label></li>
+            </ul>
+          </div>
+          <ul id="cmp-legend" class="legend cmp-legend" aria-label="Channels"></ul>
+          <div class="chart-box">
+            <canvas id="cmp-chart" role="img" aria-label="View trend and average views over time for each compared channel"></canvas>
+            <div id="cmp-tip" class="chart-tip" hidden></div>
+            <p id="cmp-empty" class="chart-empty muted" hidden></p>
+          </div>
+          <p class="muted note">View counts are current totals as reported by YouTube.</p>
+        </div>
+
+        <div class="card">
+          <h3>Channel summary</h3>
+          <div class="table-wrap">
+            <table id="cmp-table">
+              <thead>
+                <tr>
+                  <th>Channel</th>
+                  <th class="num">Subscribers</th>
+                  <th class="num">Videos</th>
+                  <th class="num">Total views</th>
+                  <th class="num">Avg views</th>
+                  <th class="num">Latest trend</th>
+                  <th>Top video</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+  <script src="app.js?v=12"></script>
+  <script src="compare.js?v=12"></script>
+</body>
+</html>
